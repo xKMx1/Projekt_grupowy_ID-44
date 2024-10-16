@@ -1,0 +1,6 @@
+[submodule "raspberry-pg"]
+	path = raspberry-pg
+	url = https://github.com/Jakub-Sawicki/raspberry-pg.git
+[submodule "ground-station-pg"]
+	path = ground-station-pg
+	url = https://github.com/Jakub-Sawicki/ground-station-pg.git
