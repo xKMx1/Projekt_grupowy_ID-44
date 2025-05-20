@@ -5,8 +5,8 @@
 #include "esp_log.h"
 #include "string.h"
 
-#define ENCODER1_PIN GPIO_NUM_4   // Kanał A enkodera 1
-#define ENCODER2_PIN GPIO_NUM_5   // Kanał A enkodera 2
+#define ENCODER1_PIN GPIO_NUM_32   // Kanał A enkodera 1
+#define ENCODER2_PIN GPIO_NUM_35   // Kanał A enkodera 2
 
 static volatile int32_t encoder1_count = 0;
 static volatile int32_t encoder2_count = 0;
@@ -14,6 +14,10 @@ static volatile int32_t encoder2_count = 0;
 #define UART_TX_PIN GPIO_NUM_1
 #define UART_RX_PIN GPIO_NUM_3
 #define UART_PORT_NUM UART_NUM_0
+
+#define TICKS_PER_REV 700.0    // impulsów na obrót
+#define WHEEL_RADIUS 0.10        // promień koła w metrach
+#define WHEEL_BASE 0.42          // odległość między kołami w metrach
 
 void IRAM_ATTR encoder1_isr_handler(void* arg) {
     encoder1_count++;
@@ -49,20 +53,36 @@ void uart_init() {
     uart_param_config(UART_PORT_NUM, &uart_config);
     uart_set_pin(UART_PORT_NUM, UART_TX_PIN, UART_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 }
-
+        
 void app_main(void) {
     encoder_init();
     uart_init();
 
-    while (1) {
-        int32_t e1 = encoder1_count;
-        int32_t e2 = encoder2_count;
+    int32_t prev_e1 = 0, prev_e2 = 0;
+    const int sample_period_ms = 100;
 
-        // Wyślij dane jako tekst, np. "E1:123 E2:456\n"
+    while (1) {
+        int32_t curr_e1 = encoder1_count;
+        int32_t curr_e2 = encoder2_count;
+
+        int32_t delta_e1 = curr_e1 - prev_e1;
+        int32_t delta_e2 = curr_e2 - prev_e2;
+
+        prev_e1 = curr_e1;
+        prev_e2 = curr_e2;
+
+        // przelicz impulsy na metry
+        float dl = (2.0f * 3.1415f * WHEEL_RADIUS * delta_e1) / TICKS_PER_REV;
+        float dr = (2.0f * 3.1415f * WHEEL_RADIUS * delta_e2) / TICKS_PER_REV;
+
+        // opcjonalnie: prędkość liniowa każdego koła
+        float vl = dl / (sample_period_ms / 1000.0f);
+        float vr = dr / (sample_period_ms / 1000.0f);
+
         char msg[64];
-        snprintf(msg, sizeof(msg), "E1:%ld E2:%ld\n", e1, e2);
+        snprintf(msg, sizeof(msg), "VL:%.3f VR:%.3f\n", vl, vr);
         uart_write_bytes(UART_PORT_NUM, msg, strlen(msg));
 
-        vTaskDelay(pdMS_TO_TICKS(100)); // 10 Hz
+        vTaskDelay(pdMS_TO_TICKS(sample_period_ms));
     }
 }
